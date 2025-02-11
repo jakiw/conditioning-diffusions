@@ -1,0 +1,56 @@
+[build-system]
+requires = [
+    "setuptools>=64",
+    "setuptools_scm>=8",
+]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "conditioning-diffusions"
+version = "0.0.1"
+
+readme = "README.md"
+requires-python = ">=3.12"
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+]
+
+dependencies = [
+    "flax",
+    "optax",
+    "pandas"
+]
+
+[project.optional-dependencies]
+examples = [
+    "jupyter",
+    "tueplots",
+    "matplotlib",]
+
+test =[
+    "pytest",
+]
+format =[
+    "pre-commit",
+    "isort",
+    "black",
+]
+full = ["conditioning-diffusions[examples]", "conditioning-diffusions[test]", "conditioning-diffusions[format]"]
+
+
+[tool.setuptools.packages.find]
+where = ["."]  # list of folders that contain the packages (["."] by default)
+include = ["conditioning-diffusions*"]  # package names should match these glob patterns (["*"] by default)
+
+
+[tool.isort]
+multi_line_output = "3"
+include_trailing_comma = "true"
+force_grid_wrap = "0"
+use_parentheses = "true"
+line_length = "120"
+
+[tool.black]
+line-length = "120"
