@@ -20,7 +20,8 @@ classifiers = [
 dependencies = [
     "flax",
     "optax",
-    "pandas"
+    "pandas",
+    "tqdm",
 ]
 
 [project.optional-dependencies]
