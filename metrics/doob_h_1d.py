@@ -9,7 +9,7 @@ from jax.lax import scan
 @partial(jit, static_argnames=["sde"])
 def get_pt_cond_y(sde, y, ts, xs):
 
-    drift, sigma, a1, sigma_transp_inv = sde
+    # drift, sigma, a1, sigma_transp_inv = sde
     dx = xs[1] - xs[0]
 
     y_index = jnp.argmin(jnp.abs(xs - y))
@@ -18,8 +18,8 @@ def get_pt_cond_y(sde, y, ts, xs):
 
     @partial(vmap, in_axes=(0, None, None, None))
     def back_at_value(x, t, dt, p_next):
-        mean = x + dt * drift(t, x)
-        var = dt * sigma(t, x, jnp.array([1.0])) ** 2
+        mean = x + dt * sde.drift(t, x)
+        var = dt * sde.sigma(t, x, jnp.array([1.0])) ** 2
         transition_kernel = jnp.exp(-((xs - mean) ** 2) / (2 * var)) * 1 / jnp.sqrt(2 * jnp.pi * var)
         transition_kernel *= dx
         # dont want to normalize since otherwise TK at the borders where half of it is outside of
@@ -51,7 +51,6 @@ def get_pt_cond_y(sde, y, ts, xs):
 
 # take nable log of the above function to get doobs h transform
 def get_doob_drift(sde, y, ts, xs):
-    drift, sigma, a, sigma_transp_inv = sde
     p_array = get_pt_cond_y(sde, y, ts, xs)
     # dts = ts[1:] - ts[:-1]
     two_dxs = xs[2:] - xs[:-2]
@@ -77,7 +76,7 @@ def get_doob_drift(sde, y, ts, xs):
         i_t = jnp.searchsorted(ts_, t, side="right") - 1
         i_x = jnp.argmin(jnp.abs(x - xs_))
         nabla_log = log_derivatives[i_t, i_x]
-        nabla_log = a(t, x, nabla_log)
+        nabla_log = sde.covariance(t, x, nabla_log)
         return nabla_log
 
     return drift, log_derivatives
