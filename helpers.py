@@ -2,6 +2,8 @@ import jax
 import jax.numpy as jnp
 from jax import vmap
 
+from sdes import sdes
+
 # Take a neural network model and reparametrizes it as a control function for an SDE
 
 
@@ -30,26 +32,22 @@ def apply_nn_drift_y_free(nn_model, nn_params, detach=False):
 
 
 def apply_nn_drift_sde(sde, nn_model, nn_params, y_obs, detach=False):
-    drift, sigma, a, sigma_transp_inv = sde
-
     nn_control = apply_nn_drift(nn_model, nn_params, y_obs, detach=detach)
 
     def nn_control_with_sde_drift(t, x):
-        return nn_control(t, x) + drift(t, x)
+        return nn_control(t, x) + sde.drift(t, x)
 
-    nn_sde = (nn_control_with_sde_drift, sigma, a, sigma_transp_inv)
+    nn_sde = (nn_control_with_sde_drift, sde.sigma, sde.covariance, sde.sigma_transp_inv)
     return nn_sde
 
 
 def apply_nn_drift_sde_y_free(sde, nn_model, nn_params, detach=False):
-    drift, sigma, a, sigma_transp_inv = sde
-
     nn_control = apply_nn_drift_y_free(nn_model, nn_params, detach=detach)
 
     def nn_control_with_sde_drift(t, x, y):
-        return nn_control(t, x, y) + drift(t, x)
+        return nn_control(t, x, y) + sde.drift(t, x)
 
-    nn_sde = (nn_control_with_sde_drift, sigma, a, sigma_transp_inv)
+    nn_sde = (nn_control_with_sde_drift, sde.sigma, sde.covariance, sde.sigma_transp_inv)
     return nn_sde
 
 
@@ -57,17 +55,15 @@ def apply_nn_drift_sde_y_free(sde, nn_model, nn_params, detach=False):
 
 
 def vmap_sde_dimension(sde):
-    drift, sigma, a, sigma_transp_inv = sde
-    drift_D = vmap(drift, in_axes=(None, 0))
-    sigma_D = vmap(sigma, in_axes=(None, 0, 0))
-    a_D = vmap(sigma, in_axes=(None, 0, 0))
-    sigma_transp_inv_D = vmap(sigma_transp_inv, in_axes=(None, 0, 0))
-    sde_D = (drift_D, sigma_D, a_D, sigma_transp_inv_D)
+    drift_D = vmap(sde.drift, in_axes=(None, 0))
+    sigma_D = vmap(sde.sigma, in_axes=(None, 0, 0))
+    a_D = vmap(sde.sigma, in_axes=(None, 0, 0))
+    sigma_transp_inv_D = vmap(sde.sigma_transp_inv, in_axes=(None, 0, 0))
+    sde_D = sdes.SDE(drift_D, sigma_D, a_D, sigma_transp_inv_D)
     return sde_D
 
 
 def vmap_control_only_first_dimension(control, D):
-
     def new_control(t, x):
         zeros = jnp.zeros(D)
         c = control(t, x[0])

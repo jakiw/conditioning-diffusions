@@ -4,12 +4,11 @@ from jax.lax import scan
 
 
 def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
-    drift, sigma, a, sigma_transp_inv = sde
     D = sample_path.shape[1]
 
-    drift_jac = jacfwd(drift, argnums=1)
+    drift_jac = jacfwd(sde.drift, argnums=1)
 
-    sigma_jac = jacfwd(sigma, argnums=1)
+    sigma_jac = jacfwd(sde.sigma, argnums=1)
 
     # integration_mode = "first_dBt"
     # if "integration_mode" in kwargs:
@@ -43,7 +42,7 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
 
         # Basically two different ways to discretize \int J_{s | 0} sigma^{-T} (dBs)
         # Once approximating J_{s | 0} = J_{0 | 0} and once as the EM approx of J_{t | 0} = J_{0|0} + delta *
-        sigma_dBt = sigma_transp_inv(t, x, dBt)
+        sigma_dBt = sde.sigma_transp_inv(t, x, dBt)
 
         sigma_dBt_J_delta_t = sigma_dBt + dt * sigma_dBt.T.dot(drift_jac(t, x)) + sigma_dBt.T.dot(sigma_jac(t, x, dBt))
 
@@ -100,7 +99,6 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
         doobs = doobs[::-1, :]
         doobs = doobs / (ts[-1] - ts[:-1, None])
     elif mode == "optimal":
-
         # WARNING: This currently only works if ts are equidistant
         # Otherwise we need more something like a convolution
         # Since in fact the last one of the doobs is the one which got multiplied so often

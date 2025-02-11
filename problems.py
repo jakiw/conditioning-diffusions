@@ -2,16 +2,16 @@ import jax
 import jax.numpy as jnp
 
 from helpers import vmap_control_only_first_dimension, vmap_sde_dimension
-from sdes.sdes import dm_toy_sde, double_well_sde, ou_sde, sin_well_sde
+from sdes.sdes import SDE, dm_toy_sde, double_well_sde, ou_sde, sin_well_sde, true_control
 
 
 def dm_toy_problem(D=1):
     y_obs = -1
     y_obs_arr = jnp.ones(D) * y_obs
-    sde, control = dm_toy_sde(0.005, 2, y_obs)
+    sde = dm_toy_sde(0.005, 2)
+    control = true_control(sde, y_obs)
 
     sde = vmap_sde_dimension(sde)
-    # control = vmap(control, in_axes=(None, 0))
     control = vmap_control_only_first_dimension(control, D)
 
     y_initial_validation = jnp.ones(D) * y_obs
@@ -23,7 +23,8 @@ def dm_toy_problem(D=1):
 def sin_toy_problem(potential_height, D=1):
     y_obs = -1
     y_obs_arr = jnp.ones(D) * y_obs
-    sde, control = sin_well_sde(potential_height, y_obs)
+    sde = sin_well_sde(potential_height)
+    control = true_control(sde, y_obs)
 
     sde = vmap_sde_dimension(sde)
     control = vmap_control_only_first_dimension(control, D)
@@ -37,7 +38,8 @@ def sin_toy_problem(potential_height, D=1):
 def double_well_toy_problem(potential_height, D=1):
     y_obs = -1
     y_obs_arr = jnp.ones(D) * y_obs
-    sde, control = double_well_sde(potential_height, y_obs)
+    sde = double_well_sde(potential_height)
+    control = true_control(sde, y_obs)
 
     sde = vmap_sde_dimension(sde)
     control = vmap_control_only_first_dimension(control, D)
@@ -51,20 +53,19 @@ def double_well_toy_problem(potential_height, D=1):
 def double_well_toy_problem_opening(potential_height, D=1):
     y_obs = -1
     y_obs_arr = jnp.ones(D) * y_obs
-    sde, control = double_well_sde(3, y_obs)
+    sde = double_well_sde(3)
+    control = true_control(sde, y_obs)
 
     sde = vmap_sde_dimension(sde)
-
-    drift, sigma, a, sigma_transp_inv = sde
 
     def new_drift(t, x):
         left = 0.4
         right = 0.6
         sharpness = 10
         indicator_left_right = jax.nn.sigmoid((x - left) * sharpness) - jax.nn.sigmoid((x - right) * sharpness)
-        return drift(t, x) * (1 - indicator_left_right)
+        return sde.drift(t, x) * (1 - indicator_left_right)
 
-    sde = (new_drift, sigma, a, sigma_transp_inv)
+    sde = SDE(new_drift, sde.sigma, sde.covariance, sde.sigma_transp_inv)
 
     control = vmap_control_only_first_dimension(control, D)
 
@@ -77,7 +78,8 @@ def double_well_toy_problem_opening(potential_height, D=1):
 def ou_toy_problem(alpha, D=1):
     y_obs = -1
     y_obs_arr = jnp.ones(D) * y_obs
-    sde, control = ou_sde(alpha, y_obs)
+    sde, control = ou_sde(alpha)
+    control = true_control(sde, y_obs)
 
     sde = vmap_sde_dimension(sde)
     control = vmap_control_only_first_dimension(control, D)

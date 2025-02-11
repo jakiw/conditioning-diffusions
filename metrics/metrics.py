@@ -4,6 +4,7 @@ import jax.numpy as jnp
 from jax import jit, random, vmap
 
 from helpers import apply_nn_drift_sde, apply_nn_drift_sde_y_free, apply_nn_drift_y_free
+from sdes import sdes
 from sdes.run_sde_euler_maryuama import run_sde
 
 
@@ -26,19 +27,13 @@ def compare_with_true_drift_along_path(ts, path, y, control, true_drift):
 @partial(jit, static_argnames=["sde", "nn_model", "true_control"])
 def kl_metrics(rng, sde, ts, nn_model, nn_params, initial_samples, true_control, y_obs):
     # Computes KL(Generated | Truth)
-    drift, sigma, a, sigma_transp_inv = sde
+    # drift, sigma, a, sigma_transp_inv = sde
     rngs = random.split(rng, initial_samples.shape[0])
 
     nn_drift = apply_nn_drift_y_free(nn_model, nn_params)
     # nn_sde = apply_nn_drift_sde(sde, nn_model, nn_params)
 
-    true_control_and_sde_drift = lambda t, x: true_control(t, x) + drift(t, x)
-
-    conditioned_sde = (true_control_and_sde_drift, sigma, a, sigma_transp_inv)
-    # if sample_from == "true":
-    #     conditioned_sde = (true_control_and_sde_drift, sigma, a, sigma_transp_inv)
-    # else:
-    #     conditioned_sde = (nn_control_and_sde_drift, sigma, a, sigma_transp_inv)
+    conditioned_sde = sdes.conditioned_sde(sde, true_control)
 
     paths, _, __ = vmap(run_sde, in_axes=(0, None, None, 0), out_axes=(0))(rngs, conditioned_sde, ts, initial_samples)
     # ys = jnp.tile(y_obs, (paths.shape[1] - 1, 1))
@@ -49,12 +44,6 @@ def kl_metrics(rng, sde, ts, nn_model, nn_params, initial_samples, true_control,
 
 
 def endpoint_distance_amortized(rng, sde, ts, true_control, initial_samples):
-
-    drift, sigma, a, sigma_transp_inv = sde
-    D = initial_samples.shape[1]
-    # true_conditioned_drift = lambda t_, x_: drift(t_, x_) + a(t_, x_, true_control(t_, x_))
-    # sde_conditioned_truth = (true_conditioned_drift, sigma, a, sigma_transp_inv)
-
     # Making sure different brownian motions are used here and
     # in the generatino of the paths using the control
     # otherwise the uncontrolled paths with these brownian motions already reach the target
@@ -67,9 +56,6 @@ def endpoint_distance_amortized(rng, sde, ts, true_control, initial_samples):
 
     @partial(jit, static_argnames=["sde", "nn_model", "true_control"])
     def metric(rng, sde, ts, nn_model, nn_params, initial_samples, true_control, y_obs):
-        # nn_control = lambda t, x, y: nn_model.apply(nn_params, t, x, y)
-        # nn_control_and_sde_drift = lambda t, x: nn_control(t, x, y_obs) + drift(t, x)
-        # conditioned_sde = (nn_control_and_sde_drift, sigma, a, sigma_transp_inv)
         conditioned_sde = apply_nn_drift_sde_y_free(sde, nn_model, nn_params)
 
         rngs = random.split(rng, initial_samples.shape[0])
@@ -85,12 +71,6 @@ def endpoint_distance_amortized(rng, sde, ts, true_control, initial_samples):
 
 
 def endpoint_distance(rng, sde, ts, true_control, initial_samples):
-
-    drift, sigma, a, sigma_transp_inv = sde
-    D = initial_samples.shape[1]
-    # true_conditioned_drift = lambda t_, x_: drift(t_, x_) + a(t_, x_, true_control(t_, x_))
-    # sde_conditioned_truth = (true_conditioned_drift, sigma, a, sigma_transp_inv)
-
     # Making sure different brownian motions are used here and
     # in the generatino of the paths using the control
     # otherwise the uncontrolled paths with these brownian motions already reach the target
@@ -101,10 +81,6 @@ def endpoint_distance(rng, sde, ts, true_control, initial_samples):
 
     @partial(jit, static_argnames=["sde", "nn_model", "true_control"])
     def metric(rng, sde, ts, nn_model, nn_params, initial_samples, true_control, y_obs):
-        # nn_control = lambda t, x, y: nn_model.apply(nn_params, t, x, y)
-        # nn_control_and_sde_drift = lambda t, x: nn_control(t, x, y_obs) + drift(t, x)
-        # conditioned_sde = (nn_control_and_sde_drift, sigma, a, sigma_transp_inv)
-
         conditioned_sde = apply_nn_drift_sde(sde, nn_model, nn_params, y_obs)
 
         rngs = random.split(rng, initial_samples.shape[0])
@@ -120,11 +96,6 @@ def endpoint_distance(rng, sde, ts, true_control, initial_samples):
 
 
 def amortized_mean_var_metric(rng, sde, ts, true_control, initial_samples):
-    D = initial_samples.shape[1]
-    drift, sigma, a, sigma_transp_inv = sde
-    # true_conditioned_drift = lambda t_, x_: drift(t_, x_) + a(t_, x_, true_control(t_, x_))
-    # sde_conditioned_truth = (true_conditioned_drift, sigma, a, sigma_transp_inv)
-
     # Making sure different brownian motions are used here and
     # in the generatino of the paths using the control
     # otherwise the uncontrolled paths with these brownian motions already reach the target
@@ -166,25 +137,18 @@ def amortized_mean_var_metric(rng, sde, ts, true_control, initial_samples):
 
 
 def mean_var_metric(rng, sde, ts, true_control, initial_samples):
-    D = initial_samples.shape[1]
-    drift, sigma, a, sigma_transp_inv = sde
-    true_conditioned_drift = lambda t_, x_: drift(t_, x_) + a(t_, x_, true_control(t_, x_))
-    sde_conditioned_truth = (true_conditioned_drift, sigma, a, sigma_transp_inv)
+    sde_conditioned_truth = sdes.conditioned_sde(sde, true_control)
+
     rngs = random.split(rng, initial_samples.shape[0])
     paths_conditioned_truth, _, __ = vmap(run_sde, in_axes=(0, None, None, 0), out_axes=(0))(
         rngs, sde_conditioned_truth, ts, initial_samples
     )
 
     means = jnp.mean(paths_conditioned_truth, axis=0)
-    # transposed_paths = jnp.transpose(paths_conditioned_truth, axes=(2, 1, 0))
-    # vars = vmap(jnp.cov, in_axes=(1))(paths_conditioned_truth.T)
     vars = jnp.var(paths_conditioned_truth, axis=0)
 
     @partial(jit, static_argnames=["sde", "nn_model", "true_control"])
     def metric(rng, sde, ts, nn_model, nn_params, initial_samples, true_control, y_obs):
-        # nn_control = lambda t, x, y: nn_model.apply(nn_params, t, x, y)
-        # nn_control_and_sde_drift = lambda t, x: nn_control(t, x, y_obs) + drift(t, x)
-        # conditioned_sde = (nn_control_and_sde_drift, sigma, a, sigma_transp_inv)
         conditioned_sde = apply_nn_drift_sde(sde, nn_model, nn_params, y_obs)
 
         rngs = random.split(rng, initial_samples.shape[0])
@@ -193,7 +157,6 @@ def mean_var_metric(rng, sde, ts, true_control, initial_samples):
         )
 
         means_gen = jnp.mean(paths, axis=0)
-        # vars_gen = jnp.var(paths, axis=0)
         vars_gen = jnp.var(paths, axis=0)
 
         mean_error = jnp.mean((means - means_gen) ** 2, axis=1)

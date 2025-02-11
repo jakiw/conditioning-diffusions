@@ -15,8 +15,7 @@ from sdes.run_sde_euler_maryuama import run_sde
 
 @partial(grad, argnums=0)
 def nabla_log_potential(x, x_, t, dt, sde):
-    drift, sigma, a, sigma_transp_inv = sde
-    return -jnp.sum((x + dt * drift(t, x) - x_) ** 2) / (2 * dt * sigma(t, x))
+    return -jnp.sum((x + dt * sde.drift(t, x) - x_) ** 2) / (2 * dt * sde.sigma(t, x))
 
 
 def get_loss_single_path(rng, sde, nn_model, nn_params, ts, initial_sample):
@@ -26,28 +25,24 @@ def get_loss_single_path(rng, sde, nn_model, nn_params, ts, initial_sample):
     x = sample_path[:-1, :]
     x_ = sample_path[1:, :]
     y = sample_path[-1, :]
-    # ys = jnp.tile(y, (x.shape[0], 1))
     predictions = vmap(nn_model.apply, in_axes=(None, 0, 0, None))(nn_params, ts[:-1], sample_path[:-1], y)
     lp = vmap(nabla_log_potential, in_axes=(0, 0, 0, 0, None))(x, x_, ts[:-1], dts, sde)
-    # jax.lax.cond(jnp.any(jnp.isnan(lp)), lambda: jprint("Infinity"), lambda: None)
 
     t_factor = (1 - ts[:-1, None]) ** 0.5
     error = predictions - lp * t_factor
     error = jnp.mean(error**2)
-    # return error, sample, predictions, lp
     return error, sample_path, lp
 
 
 def get_loss(rng, sde, nn_model, nn_params, ts, initial_samples, _y_obs):
     rngs = random.split(rng, initial_samples.shape[0])
     f = lambda rng_, s_: get_loss_single_path(rng_, sde, nn_model, nn_params, ts, s_)
-    errors = vmap(f, in_axes=(0, 0), out_axes=(0))(rngs, initial_samples)
+    errors, _sample_paths, _lp = vmap(f, in_axes=(0, 0), out_axes=(0))(rngs, initial_samples)
     return jnp.mean(errors)
 
 
 def get_loss_nik_single_path(rng, sde, nn_model, nn_params, ts, initial_sample, **kwargs):
     rng, srng = random.split(rng)
-    drift, sigma, a, sigma_transp_inv = sde
     sample_path, _drift_evals, dBts = run_sde(srng, sde, ts, initial_sample, noise_last_step=True)
 
     rng, srng = random.split(rng)
@@ -56,13 +51,11 @@ def get_loss_nik_single_path(rng, sde, nn_model, nn_params, ts, initial_sample, 
     predictions = vmap(nn_model.apply, in_axes=(None, 0, 0, None))(nn_params, ts[:-1], sample_path[:-1], y)
     t_factor = (1 - ts[:-1, None]) ** 0.5
 
-    a_times_doobs = vmap(a, in_axes=(0, 0, 0))(ts[:-1], sample_path[:-1], doobs)
+    a_times_doobs = vmap(sde.covariance, in_axes=(0, 0, 0))(ts[:-1], sample_path[:-1], doobs)
     error = predictions - a_times_doobs * t_factor
-    # error = (predictions/t_factor - doobs) * t_factor
-    # error = predictions/t_factor - doobs
+
     error = jnp.mean(error**2)
-    # return error, sample, predictions, lp
-    return error  # , sample_path, doobs, _jacobians
+    return error
 
 
 def get_loss_nik(rng, sde, nn_model, nn_params, ts, initial_samples, _y_obs, **kwargs):
@@ -78,7 +71,6 @@ def get_loss_nik(rng, sde, nn_model, nn_params, ts, initial_samples, _y_obs, **k
 def get_loss_nik_single_path_consistency(rng, sde, nn_model, nn_params, ts, initial_sample, y_obs, **kwargs):
     rng, srng = random.split(rng)
     # print("Loss single path")
-    drift, sigma, a, sigma_transp_inv = sde
 
     # todo: detach gradients
     # def nn_control(t, x):
@@ -150,8 +142,6 @@ def get_loss_nik_consistency(rng, sde, nn_model, nn_params, ts, initial_samples,
 
 
 def get_loss_reparametrization_trick_single_trajectory(rng, sde, nn_model, nn_params, ts, initial_samples, **kwargs):
-    drift, sigma, a, sigma_transp_inv = sde
-
     def transition_approx(M: Callable, scale: Callable, drift: Callable):
         dz_drift = jax.jacfwd(drift)
         ds_M = jax.jacfwd(M)
@@ -169,7 +159,7 @@ def get_loss_reparametrization_trick_single_trajectory(rng, sde, nn_model, nn_pa
 
     M = lambda t: (ts[-1] - t)
     scale = lambda s: 1 / (ts[-1] - s)
-    reparam_doobs_fn = transition_approx(M, scale, drift)
+    reparam_doobs_fn = transition_approx(M, scale, sde.drift)
 
     rng, srng = random.split(rng)
     sample_path, _, dBts = run_sde(srng, sde, ts, initial_samples, noise_last_step=True)
