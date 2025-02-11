@@ -4,13 +4,11 @@ from jax.lax import scan
 
 
 def run_sde(rng, sde, ts, initial_sample, y=None, noise_last_step=False):
-    # drift, sigma, a, sigma_transp_inv = vmap_sde(sde)
-    drift_old, sigma, a, sigma_transp_inv = sde
 
     if y is not None:
-        drift = lambda t, x: drift_old(t, x, y)
+        drift = lambda t, x: sde.drift(t, x, y)
     else:
-        drift = drift_old
+        drift = sde.drift
 
     zeros = jnp.zeros_like(initial_sample)
 
@@ -30,7 +28,7 @@ def run_sde(rng, sde, ts, initial_sample, y=None, noise_last_step=False):
         dBt = jnp.sqrt(dt) * noise
 
         drift_eval = drift(t, x)
-        x = x + dt * drift(t, x) + sigma(t, x, dBt)
+        x = x + dt * drift(t, x) + sde.sigma(t, x, dBt)
 
         return (x, rng), (x, drift_eval, dBt)
 
@@ -49,10 +47,3 @@ def run_sde(rng, sde, ts, initial_sample, y=None, noise_last_step=False):
 
     return xs, drift_evals, dBts
 
-
-# N_timesteps = 1000
-# ts = jnp.linspace(0, 10, N_timesteps)
-# N_data = 100
-# D_data = 1
-# initial_samples = random.normal(rng, (N_timesteps, D_data))
-# samples = run_sde(rng, ou, ts, initial_samples[0, :])
