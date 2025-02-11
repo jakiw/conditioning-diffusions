@@ -1,7 +1,9 @@
-from helpers import vmap_sde_dimension, vmap_control_only_first_dimension
-from sdes.sdes import dm_toy_sde, sin_well_sde, double_well_sde, ou_sde
-import jax.numpy as jnp
 import jax
+import jax.numpy as jnp
+
+from helpers import vmap_control_only_first_dimension, vmap_sde_dimension
+from sdes.sdes import dm_toy_sde, double_well_sde, ou_sde, sin_well_sde
+
 
 def dm_toy_problem(D=1):
     y_obs = -1
@@ -54,13 +56,14 @@ def double_well_toy_problem_opening(potential_height, D=1):
     sde = vmap_sde_dimension(sde)
 
     drift, sigma, a, sigma_transp_inv = sde
+
     def new_drift(t, x):
         left = 0.4
         right = 0.6
         sharpness = 10
-        indicator_left_right = jax.nn.sigmoid((x - left)*sharpness) - jax.nn.sigmoid((x - right)*sharpness)
+        indicator_left_right = jax.nn.sigmoid((x - left) * sharpness) - jax.nn.sigmoid((x - right) * sharpness)
         return drift(t, x) * (1 - indicator_left_right)
-    
+
     sde = (new_drift, sigma, a, sigma_transp_inv)
 
     control = vmap_control_only_first_dimension(control, D)
@@ -78,7 +81,7 @@ def ou_toy_problem(alpha, D=1):
 
     sde = vmap_sde_dimension(sde)
     control = vmap_control_only_first_dimension(control, D)
-    
+
     y_initial_validation = jnp.ones(D) * y_obs
     y_initial_validation = y_initial_validation.at[0].set(1)
 
@@ -100,20 +103,20 @@ def ou_toy_problem(alpha, D=1):
 #         sharpness = 10
 #         indicator_left_right = jax.nn.sigmoid((norm_x - left)*sharpness) - jax.nn.sigmoid((norm_x - right)*sharpness)
 #         slow_circle = 0.05 + 1 - indicator_left_right
-#         return slow_circle    
+#         return slow_circle
 
 #     def sigma(t, x, dBt):
 #         s = sigma_value(t, x)
 #         return s * dBt
-    
+
 #     def a(t, x, dBt):
 #         s = sigma_value(t, x)
 #         return s**2 * dBt
-        
+
 #     def sigma_transp_inv(t, x, dBt):
 #         s = sigma_value(t, x)
 #         return dBt / s
-    
+
 #     sde = (drift, sigma, a, sigma_transp_inv)
 
 #     y_obs = -1
