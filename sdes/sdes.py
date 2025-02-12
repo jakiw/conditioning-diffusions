@@ -62,6 +62,39 @@ def dm_toy_sde(t_initial, t_final):
     return SDE(drift, bm_sigma, bm_a, bm_sigma_transp_inv)
 
 
+def mnist_sde(alphas, betas, model, params, T=1.0):
+    def nn_prediction(t, x):
+        alpha, beta = get_alpha_beta_t(t, x)
+        return model.apply(params, x, alpha.squeeze())
+
+    def get_alpha_beta_t(t, x):
+        N = len(alphas)
+        t_idx = ((t * N) / T).astype(int)
+        alpha = alphas[-t_idx] * jnp.ones((x.shape[0], 1, 1, 1))
+        beta = betas[-t_idx]
+        return alpha, beta
+
+    def sigma(t, x, dBt):
+        _, beta_t = get_alpha_beta_t(t, x)
+        return beta_t**0.5 * dBt
+
+    def mnist_drift(t, x):
+        alpha, beta = get_alpha_beta_t(t, x)
+        noise_pred = nn_prediction(t, x)
+        noised_data = 1 / (1 - beta) ** 0.5 * (x - beta / (1 - alpha) ** 0.5 * noise_pred)
+        return noised_data
+
+    def mnist_covariance(t, x, v):
+        _alpha, beta = get_alpha_beta_t(t, x)
+        return beta * v
+
+    def mnist_sigma_transp_inv(t, x, dBt):
+        _, beta_t = get_alpha_beta_t(t, x)
+        return 1 / beta_t**0.5 * dBt
+
+    return SDE(mnist_drift, sigma, mnist_covariance, mnist_sigma_transp_inv)
+
+
 def conditioned_sde(sde, true_control):
     def true_conditioned_drift(t_, x_):
         return sde.drift(t_, x_) + sde.covariance(t_, x_, true_control(t_, x_))
