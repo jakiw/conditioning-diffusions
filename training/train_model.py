@@ -64,24 +64,28 @@ def train_model(
     # sde, _ = dm_problem(0.01, 2, y_obs_val)
 
     rng, srng = random.split(rng)
-    mv_metric = mean_var_metric(srng, sde, ts, true_control, initial_samples_eval)
-    mv_amortized = amortized_mean_var_metric(rng, sde, ts, true_control, initial_samples_eval)
-    endpoint_amortized = endpoint_distance_amortized(rng, sde, ts, true_control, initial_samples_eval)
-    endpoint_rare_event = endpoint_distance(rng, sde, ts, true_control, initial_samples_eval)
-
-    best_params = nn_params.copy()
-    min_metric = jnp.inf
+    if true_control is not None:
+        mv_metric = mean_var_metric(srng, sde, ts, true_control, initial_samples_eval)
+        mv_amortized = amortized_mean_var_metric(rng, sde, ts, true_control, initial_samples_eval)
+        endpoint_amortized = endpoint_distance_amortized(rng, sde, ts, true_control, initial_samples_eval)
+        endpoint_rare_event = endpoint_distance(rng, sde, ts, true_control, initial_samples_eval)
+        metrics = {
+            "kl": kl_metrics,
+            "mean_var_rare_event": mv_metric,
+            "mean_var_amortized": mv_amortized,
+            "endpoint_distance": endpoint_amortized,
+            "endpoint_distance_rare_event": endpoint_rare_event,
+        }
+    else:
+        metrics = {}
+    
+    # best_params = nn_params.copy()
+    # min_metric = jnp.inf
 
     x0s = jnp.tile(y_init_eval, (N_batch_size, 1))
 
-    metrics = {
-        "kl": kl_metrics,
-        "mean_var_rare_event": mv_metric,
-        "mean_var_amortized": mv_amortized,
-        "endpoint_distance": endpoint_amortized,
-        "endpoint_distance_rare_event": endpoint_rare_event,
-    }
-    main_metric = "mean_var_rare_event"
+
+    # main_metric = "mean_var_rare_event"
 
     best_epoch = -1
     for i in tqdm(range(N_batches), desc="Model Training"):
@@ -104,9 +108,9 @@ def train_model(
             grad_norms = []
 
             # print(f"Grad norm is {grad_norm}")
-            weight_norm = jnp.sqrt(
-                jax.tree_util.tree_reduce(lambda acc, g: acc + jnp.sum(g**2), nn_params, initializer=0.0)
-            )
+            # weight_norm = jnp.sqrt(
+            #     jax.tree_util.tree_reduce(lambda acc, g: acc + jnp.sum(g**2), nn_params, initializer=0.0)
+            # )
             # print(f"Weight norm is {weight_norm}")
             losses = []
 
@@ -129,24 +133,24 @@ def train_model(
             # all_metrics.append({"kl_true": kl_m, "mean_var": mv_m, "kl_gen": kl_m_gen, "grad_variance": grad_var})
             all_metrics.append(metrics_log)
 
-            if metrics_log[main_metric] < min_metric:
-                best_params = nn_params.copy()
-                min_metric = metrics_log[main_metric]
-                best_epoch = i + 1
+            # if metrics_log[main_metric] < min_metric:
+            #     best_params = nn_params.copy()
+            #     min_metric = metrics_log[main_metric]
+            #     best_epoch = i + 1
 
     all_metrics = {key: [d[key] for d in all_metrics] for key in all_metrics[0]}
-    best_metrics = {}
+    last_metrics = {}
     for metric_name, metric in metrics.items():
         # best = onp.min(all_metrics[metric_name])
-        best_metrics[metric_name] = all_metrics[metric_name][-1]
+        last_metrics[metric_name] = all_metrics[metric_name][-1]
 
     average_grad_var = onp.mean(all_metrics["grad_variance"][1:])
-    best_metrics["avg_grad_var"] = average_grad_var
-    best_metrics["best_epoch"] = best_epoch
-    all_metrics["best_epoch"] = best_epoch
+    last_metrics["avg_grad_var"] = average_grad_var
+    # best_metrics["best_epoch"] = best_epoch
+    # all_metrics["best_epoch"] = best_epoch
 
     # best_metrics = {"kl": best_kl, "mean_var": best_mv, "grad_variance": average_grad_var, "best_epoch": best_epoch}
 
     # BEST METRICS ARE ACTUALLY JUST LAST METRICS NOW
 
-    return nn_params, best_params, all_metrics, best_metrics
+    return nn_params, all_metrics, last_metrics

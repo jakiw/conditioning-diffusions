@@ -1,0 +1,15 @@
+dmff @ git+https://github.com/deepmodeling/DMFF@2978f178917a5e4f22b25e23fd208b60e3fbe9c3
+flax==0.8.3
+jax==0.4.20
+jaxlib==0.4.20
+matplotlib==3.9.2
+mdtraj==1.10.3
+notebook==7.2.2
+openmm==8.2.0
+openpathsampling==1.6.1
+parmed==4.3.0
+pot==0.9.4
+rdkit==2024.9.2
+scikit-image==0.24.0
+scipy==1.12.0
+tqdm==4.66.5

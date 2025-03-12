@@ -1,0 +1,10 @@
+Rng number 0
+1/1 Training BEL optimal on Protein Problem
+hi
+(132,)
+Traced<ShapedArray(float32[132])>with<BatchTrace(level=4/0)> with
+  val = Traced<ShapedArray(float32[100,132])>with<DynamicJaxprTrace(level=1/0)>
+  batch_dim = 0
+Traced<ShapedArray(float32[132])>with<BatchTrace(level=4/0)> with
+  val = Traced<ShapedArray(float32[100,132])>with<DynamicJaxprTrace(level=1/0)>
+  batch_dim = 0
