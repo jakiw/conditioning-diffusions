@@ -3,6 +3,7 @@ import jax.numpy as jnp
 from jax import vmap
 
 from sdes import sdes
+from sdes.sdes import SDE
 
 # Take a neural network model and reparametrizes it as a control function for an SDE
 
@@ -36,8 +37,15 @@ def apply_nn_drift_sde(sde, nn_model, nn_params, y_obs, detach=False):
 
     def nn_control_with_sde_drift(t, x):
         return nn_control(t, x) + sde.drift(t, x)
+    
+    nn_sde = SDE(
+        drift=nn_control_with_sde_drift,
+        sigma=sde.sigma,
+        covariance=sde.covariance,
+        sigma_transp_inv=sde.sigma_transp_inv
+    )
 
-    nn_sde = (nn_control_with_sde_drift, sde.sigma, sde.covariance, sde.sigma_transp_inv)
+    # nn_sde = (nn_control_with_sde_drift, sde.sigma, sde.covariance, sde.sigma_transp_inv)
     return nn_sde
 
 

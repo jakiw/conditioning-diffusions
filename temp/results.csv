@@ -1,2 +1,2 @@
-problem,loss,avg_grad_var
-Protein Problem,BEL optimal,
+problem,loss,energy,avg_grad_var
+Proteins,BEL optimal,nan,

@@ -170,3 +170,23 @@ def mean_var_metric(rng, sde, ts, true_control, initial_samples):
         return error
 
     return metric
+
+
+
+def get_energy_metric(sde, energy, ts):
+
+    @partial(jit, static_argnames=["nn_model"])
+    def metric(rng, nn_model, nn_params, initial, target):
+        conditioned_sde = apply_nn_drift_sde(sde, nn_model, nn_params, target)
+        rngs = random.split(rng, initial.shape[0])
+
+        paths, _, __ = vmap(run_sde, in_axes=(0, None, None, 0), out_axes=(0))(
+            rngs, conditioned_sde, ts, initial
+        )
+        # vmap over batch and time dimension
+        energy_gen = vmap(vmap(energy))(paths[:, :, :66])
+        mean_energy = jnp.mean(energy_gen)
+
+        return mean_energy
+
+    return metric

@@ -1,6 +1,7 @@
 import jax.numpy as jnp
 from jax import grad, jacfwd, jacobian, jacrev, jit, random, value_and_grad, vmap
 from jax.lax import scan
+from jax.debug import print as jprint
 
 
 def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
@@ -38,7 +39,8 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
         doob, rng = carry
 
         rng, srng = random.split(rng)
-
+        jprint("t: {t}, x_norm: {x}", t=t, x=jnp.linalg.norm(x))
+        # SHOULD THERE BE NO DT IN FRONT OF SIGMA?
         propagated_doob = doob + dt * doob.T.dot(drift_jac(t, x)) + doob.T.dot(sigma_jac(t, x, dBt))
 
         # Basically two different ways to discretize \int J_{s | 0} sigma^{-T} (dBs)

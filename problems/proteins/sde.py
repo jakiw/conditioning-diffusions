@@ -2,6 +2,7 @@ import jax.numpy as jnp
 from problems.proteins.system import System
 from sdes.sdes import SDE
 from helpers import vmap_sde_dimension
+from metrics.metrics import get_energy_metric
 
 temperature = 300 # from configs/aldp_diagonal_single_gaussian
 gamma = 1.0
@@ -25,45 +26,78 @@ xi_sqrt = xi**0.5
 
 ndim = system.A.shape[0]
 
-A = jnp.hstack([system.A, jnp.zeros_like(system.A)], dtype=jnp.float32)
-B = jnp.hstack([system.B, jnp.zeros_like(system.B)], dtype=jnp.float32)
-
-
 def drift(t, x):
-    q = x[:ndim]
-    v = x[ndim:]
-    dq = v
-    dv = system.dUdx(q) / system.mass - v * gamma
-    ret = jnp.hstack([
-        dq,
-        dv
-    ], dtype=jnp.float32)
-    return ret
+    dx = -system.dUdx(x) / (gamma * system.mass)
+    return dx
 
 def sigma(t, x, dBt):
-    return xi_sqrt * dBt
+    return xi_vel**0.5 * dBt
 
 def cov(t, x, v):
-    print("cov")
-    print(xi.dtype)
-    print(v.dtype)
-    return xi * v
+    return xi_vel * v
 
 def sigma_transp_inv(t, x, dBt):
-    return dBt / xi_sqrt
+    return dBt / xi_vel**0.5
 
 
-ada_sde = SDE(
+ada_sde_first_order = SDE(
     drift=drift,
     sigma=sigma,
     covariance=cov,
     sigma_transp_inv=sigma_transp_inv
 )
 
+def protein_problem(ts):
+    sde = ada_sde_first_order
+    energy = system.U
+    energy_metric = get_energy_metric(sde, energy, ts)
 
-def protein_problem():
+    return sde, {"energy": energy_metric}, system.B, system.A, f"Proteins"
+
+
+
+A = jnp.hstack([system.A, jnp.zeros_like(system.A)], dtype=jnp.float32)
+B = jnp.hstack([system.B, jnp.zeros_like(system.B)], dtype=jnp.float32)
+
+def drift_so(t, x):
+    q = x[:ndim]
+    v = x[ndim:]
+    dq = v
+    dv = -system.dUdx(q) / system.mass - v * gamma
+    ret = jnp.hstack([
+        dq,
+        dv
+    ], dtype=jnp.float32)
+    return ret
+
+def sigma_so(t, x, dBt):
+    return xi_sqrt * dBt
+
+def cov_so(t, x, v):
+    return xi * v
+
+def sigma_transp_inv_so(t, x, dBt):
+    return dBt / xi_sqrt
+
+
+ada_sde_second_order = SDE(
+    drift=drift_so,
+    sigma=sigma_so,
+    covariance=cov_so,
+    sigma_transp_inv=sigma_transp_inv_so
+)
+
+
+
+
+def protein_problem_so(ts):
     y_obs = system.B
-    sde = ada_sde
-    control = None
+    sde = ada_sde_second_order
 
-    return ada_sde, control, B, A, f"Protein Problem"
+    def energy(x):
+        q = x[:ndim]
+        return system.U(q)
+
+    energy_metric = get_energy_metric(sde, energy, ts)
+
+    return sde, {"energy": energy_metric}, B, A, f"Proteins Second Order"
