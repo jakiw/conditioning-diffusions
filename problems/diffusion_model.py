@@ -7,6 +7,7 @@ import jax
 from jax import random
 import jax.numpy as jnp
 import orbax
+import numpy as onp
 
 
 def restore_checkpoint_from_config_directory(config, workdir):
@@ -48,6 +49,7 @@ def get_problem(config, workdir):
     sde = SDE(drift, sigma, covariance, sigma_transpose_inv)
     
     y_obs = jnp.ones(config.data.shape) * 0.5
+    y_obs = jnp.array(onp.load("/home/ubuntu/WashingtonMain/conditioning-diffusions/problems/sample.npy"))
 
     control = None
 
