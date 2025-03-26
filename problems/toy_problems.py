@@ -129,3 +129,4 @@ def ou_toy_problem(alpha, D=1):
 #     y_initial_validation = y_initial_validation.at[0].set(1)
 
 #     return sde, drift, y_obs_arr, y_initial_validation, f"Slow Circle"
+
