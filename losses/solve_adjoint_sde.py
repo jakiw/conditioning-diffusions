@@ -1,6 +1,7 @@
 import jax.numpy as jnp
 from jax import grad, jacfwd, jacobian, jacrev, jit, random, value_and_grad, vmap
 from jax.lax import scan
+from jax.debug import print as jprint
 
 
 def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
@@ -26,8 +27,9 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
     time_spent = ts[-1] - ts_reverse
 
     gamma = 0.5 * (-1 + jnp.sqrt(5))
+    gamma = jnp.float32(gamma)
     alpha_factors = (time_spent[1:-1] / time_spent[2:]) ** gamma
-    alpha_factors = jnp.concatenate([jnp.array([1.0]), alpha_factors])
+    alpha_factors = jnp.concatenate([jnp.array([1.0]), alpha_factors], dtype=jnp.float32)
     # If ts are equidistant, this should result in the same thing as
     # a = jnp.arange(0, 10)
     # (a[1:-1]/a[2:])**gamma
@@ -37,7 +39,8 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
         doob, rng = carry
 
         rng, srng = random.split(rng)
-
+        jprint("t: {t}, x_norm: {x}", t=t, x=jnp.linalg.norm(x))
+        # SHOULD THERE BE NO DT IN FRONT OF SIGMA?
         propagated_doob = doob + dt * doob.T.dot(drift_jac(t, x)) + doob.T.dot(sigma_jac(t, x, dBt))
 
         # Basically two different ways to discretize \int J_{s | 0} sigma^{-T} (dBs)
@@ -86,7 +89,7 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
     is_first = jnp.zeros(reverse_paths.shape[0])
     is_first = is_first.at[0].set(1)
 
-    doob_initial = jnp.zeros(D)
+    doob_initial = jnp.zeros(D, dtype=jnp.float32)
 
     # print shape of all the arrays inputted into params
     params = [reverse_ts, dts, reverse_paths, reverse_noise, is_first, alpha_factors]

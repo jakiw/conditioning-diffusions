@@ -20,7 +20,7 @@ def update_step(
     if grad_clip >= 0:
         # grad_norm = jnp.sqrt(sum([jnp.sum(jnp.square(x)) for x in jax.tree_leaves(grad)]))
         # grad_norm = jnp.sqrt(jnp.sum(jnp.square(grads.flatten())))
-        clipped_grad = jax.tree.map(lambda x: x * grad_clip / jnp.maximum(grad_norm, grad_clip), grads)
+        clipped_grad = jax.tree_util.tree_map(lambda x: x * grad_clip / jnp.maximum(grad_norm, grad_clip), grads)
     else:
         clipped_grad = grads
 
