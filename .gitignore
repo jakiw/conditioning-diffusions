@@ -6,6 +6,7 @@ __pycache__/
 
 flow_matching_jax/
 
+wandb/
 # C extensions
 *.so
 

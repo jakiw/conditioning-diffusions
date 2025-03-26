@@ -7,6 +7,9 @@ from jax.debug import print as jprint
 def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
     D = sample_path.shape[1]
 
+    # Do we need to calculate the jacobian?
+    # I think so. In some way we need to get a dimensino D vector (the doobs)
+    # from a dimensino d input, so some kind of DxD matrix will need to be calculated
     drift_jac = jacfwd(sde.drift, argnums=1)
 
     sigma_jac = jacfwd(sde.sigma, argnums=1)
@@ -34,20 +37,60 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
     # a = jnp.arange(0, 10)
     # (a[1:-1]/a[2:])**gamma
 
+    # a way to get the dimension without using products etc to make it jit-compatible
+    D = sample_path[0, :].reshape(-1).shape[0]
+
+    def generalized_matvec(mat: jnp.ndarray, vec: jnp.ndarray) -> jnp.ndarray:
+        """
+        Performs a matrix-vector product where both `mat` and `vec` have arbitrary but matching shapes.
+
+        `vec` has shape (d1, d2, ..., dn)
+        `mat` has shape (d1, d2, ..., dn, d1, d2, ..., dn)
+
+        The function flattens both, computes the matvec product, and reshapes the result to the shape of `vec`.
+
+        Parameters:
+            mat (np.ndarray): The matrix of shape (D, D), where D = product of vec.shape
+            vec (np.ndarray): The vector of shape (d1, d2, ..., dn)
+
+        Returns:
+            np.ndarray: The result of shape (d1, d2, ..., dn)
+        """
+        orig_shape = vec.shape
+        # D = jnp.prod(orig_shape)
+        vec_flat = vec.reshape(-1)
+        mat_flat = mat.reshape(D, D)
+        result_flat = vec_flat.T.dot(mat_flat)
+        return result_flat.reshape(orig_shape)        
+
     def step(carry, params):
         t, dt, x, dBt, is_first, alpha_factor = params
         doob, rng = carry
 
         rng, srng = random.split(rng)
-        jprint("t: {t}, x_norm: {x}", t=t, x=jnp.linalg.norm(x))
-        # SHOULD THERE BE NO DT IN FRONT OF SIGMA?
-        propagated_doob = doob + dt * doob.T.dot(drift_jac(t, x)) + doob.T.dot(sigma_jac(t, x, dBt))
+        # SHOULD THERE BE NO DT IN FRONT OF SIGMA? -> Don't think so, it is multiplied by dBt
+
+        # doob_jac = doob.T.dot(drift_jac(t, x))
+        doob_jac = generalized_matvec(drift_jac(t, x), doob)
+
+        # doob_sig = doob.T.dot(sigma_jac(t, x, dBt))
+        doob_sig = generalized_matvec(sigma_jac(t, x, dBt), doob)
+
+        propagated_doob = doob + dt * doob_jac + doob_sig
+
 
         # Basically two different ways to discretize \int J_{s | 0} sigma^{-T} (dBs)
         # Once approximating J_{s | 0} = J_{0 | 0} and once as the EM approx of J_{t | 0} = J_{0|0} + delta *
         sigma_dBt = sde.sigma_transp_inv(t, x, dBt)
 
-        sigma_dBt_J_delta_t = sigma_dBt + dt * sigma_dBt.T.dot(drift_jac(t, x)) + sigma_dBt.T.dot(sigma_jac(t, x, dBt))
+
+        # sigma_dBt_jac = sigma_dBt.T.dot(drift_jac(t, x))
+        sigma_dBt_jac = generalized_matvec(drift_jac(t, x), sigma_dBt)
+
+        # sigma_dBt_jac = sigma_dBt.T.dot(sigma_jac(t, x, dBt))
+        sigma_dBt_jac = generalized_matvec(sigma_jac(t, x, dBt), sigma_dBt)
+
+        sigma_dBt_J_delta_t = sigma_dBt + dt * sigma_dBt_jac + sigma_dBt_jac
 
         # Basically the flow SDE just differentiates each part of the SDE with respect to x
         # Therefore we basically go back by d/dx (dt * drift) + d/dx (sigma * dBt)
@@ -89,7 +132,7 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
     is_first = jnp.zeros(reverse_paths.shape[0])
     is_first = is_first.at[0].set(1)
 
-    doob_initial = jnp.zeros(D, dtype=jnp.float32)
+    doob_initial = jnp.zeros(sample_path.shape[1:], dtype=jnp.float32)
 
     # print shape of all the arrays inputted into params
     params = [reverse_ts, dts, reverse_paths, reverse_noise, is_first, alpha_factors]
@@ -124,12 +167,11 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
         doobs /= dts[0]
         doobs = doobs[::-1, :]
     elif mode == "first":
-        doobs /= dts[:, None]
+        doobs /= dts.reshape((-1,) + (1,) * (doobs.ndim - 1))
         doobs = doobs[::-1, :]
     else:
         raise Exception(f"Mode '{mode}' not supported")
     # elif mode == "soc":
     #     doobs = doobs[::-1, :]
 
-    assert doobs.shape == (sample_path.shape[0] - 1, sample_path.shape[1])
     return doobs

@@ -2,8 +2,8 @@ import os
 import pickle
 
 import jax
-jax.config.update("jax_debug_nans", True)
-jax.config.update("jax_disable_jit", True)
+# jax.config.update("jax_debug_nans", True)
+# jax.config.update("jax_disable_jit", True)
 
 import jax.numpy as jnp
 import pandas as pd
@@ -15,16 +15,18 @@ from helpers import apply_function
 from losses.loss_and_model import loss_model_bel, loss_model_no_train, loss_model_reparam
 from problems.toy_problems import dm_toy_problem, double_well_toy_problem, double_well_toy_problem_opening, ou_toy_problem
 from training.train_model import train_model
-from problems.proteins.sde import protein_problem
+from problems.diffusion_model import get_problem_fn as get_problem_dm
 
 import datetime
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
 
+from flow_matching_jax.configs.fashion_mnist import get_config
+
 
 print(f"Using Jax Device: {jax.devices()}")
 
-log_dir = "logs/proteins"
+log_dir = "logs/diffusion_model"
 writer = tf.summary.create_file_writer(log_dir)
 
 # Register hyperparameters in TensorBoard
@@ -37,7 +39,7 @@ writer = tf.summary.create_file_writer(log_dir)
 
 
 # dim = 1
-ts = jnp.linspace(0, 1, 1000, dtype=jnp.float32)
+ts = jnp.linspace(0, 1, 100, dtype=jnp.float32)
 
 loss_models = [
     {"function": loss_model_bel, "args": ("first",)},
@@ -48,7 +50,9 @@ loss_models = [
     # {"function": loss_model_no_train, "args": ()},
 ]
 
-
+config = get_config()
+workdir = "/home/ubuntu/WashingtonMain/conditioning-diffusions/flow_matching_jax/workdir/fashion_mnist"
+dm_problem = get_problem_dm(config, workdir)
 # problems = [double_well_toy_problem(3, D=dim), dm_toy_problem(D=dim),  ou_toy_problem(2, D=dim), ou_toy_problem(-2, D=dim), ou_toy_problem(0, D=dim)]
 problems = [
     # {"function": double_well_toy_problem_opening, "args": (3,), "kwargs": {"D": dim}},
@@ -58,7 +62,7 @@ problems = [
     # {"function": ou_toy_problem, "args": (2,), "kwargs": {"D": dim}},
     # {"function": ou_toy_problem, "args": (-2,), "kwargs": {"D": dim}},
     # {"function": ou_toy_problem, "args": (0,), "kwargs": {"D": dim}},
-    {"function": protein_problem, "args": (ts,), "kwargs": {}},
+    {"function": dm_problem, "args": (), "kwargs": {}},
 ]
 
 

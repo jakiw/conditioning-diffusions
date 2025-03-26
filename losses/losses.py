@@ -49,9 +49,11 @@ def get_loss_nik_single_path(rng, sde, nn_model, nn_params, ts, initial_sample, 
     doobs = solve_J_equation_2(srng, sde, ts, sample_path, dBts, **kwargs)
     y = sample_path[-1, :]
     predictions = vmap(nn_model.apply, in_axes=(None, 0, 0, None))(nn_params, ts[:-1], sample_path[:-1], y)
-    t_factor = (1 - ts[:-1, None]) ** 0.5
 
     a_times_doobs = vmap(sde.covariance, in_axes=(0, 0, 0))(ts[:-1], sample_path[:-1], doobs)
+    
+    ts_ = ts[:-1].reshape((-1,) + (1,) * (a_times_doobs.ndim - 1))
+    t_factor = (1 - ts_) ** 0.5
     error = predictions - a_times_doobs * t_factor
 
     error = jnp.mean(error**2)

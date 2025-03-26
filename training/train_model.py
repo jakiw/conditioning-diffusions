@@ -23,6 +23,7 @@ def train_model(
     rng,
     ts,
     nn_model,
+    nn_params,
     metrics,
     y_obs,
     y_init_eval,
@@ -34,16 +35,11 @@ def train_model(
     N_log=100,
     N_samples_eval=2048,
 ):
-    _t = 0.0
-    D = y_init_eval.shape[0]
-    nn_params = nn_model.init(rng, _t, y_init_eval, y_obs)
-
     optimizer = optax.adam(1e-3, b1=0.97)
     opt_state = optimizer.init(nn_params)
 
     losses = []
 
-    initial_samples_eval = jnp.ones((N_samples_eval, D)) * 1
 
     rng, eval_rng = random.split(rng)
     all_metrics = []
@@ -90,7 +86,7 @@ def train_model(
     # best_params = nn_params.copy()
     # min_metric = jnp.inf
 
-    x0s = jnp.tile(y_init_eval, (N_batch_size, 1))
+    x0s = jnp.repeat(y_init_eval[jnp.newaxis, ...], N_batch_size, axis=0)
 
 
     # main_metric = "mean_var_rare_event"
@@ -133,9 +129,9 @@ def train_model(
             metrics_log = {"grad_variance": grad_var}
             tf.summary.scalar("grad_variance", grad_var, step=i+1)
             for metric_name, metric in metrics.items():
-                metric_value = metric(rng, nn_model, nn_params, initial_samples_eval, y_obs)
+                #should y_init eval have a batch dimension or not? i changed this 
+                metric_value = metric(rng, nn_model, nn_params, y_init_eval, y_obs)
                 metrics_log[metric_name] = metric_value
-                print("Writing scalar")
                 tf.summary.scalar(metric_name, metric_value, step=i+1)
 
             # kl_m = kl_metrics(eval_rng, sde, ts, nn_model, nn_params, initial_samples_eval, true_control, y_obs, "true")

@@ -9,10 +9,9 @@ def run_sde(rng, sde, ts, initial_sample, y=None, noise_last_step=False):
         drift = lambda t, x: sde.drift(t, x, y)
     else:
         drift = sde.drift
-
+    
     zeros = jnp.zeros_like(initial_sample, dtype=jnp.float32)
 
-    jprint(" EULER MARYUAMA ")
     def step(carry, params):
         t, dt, is_last = params
         x, rng = carry
@@ -29,8 +28,8 @@ def run_sde(rng, sde, ts, initial_sample, y=None, noise_last_step=False):
         dBt = noise
         drift_eval = drift(t, x)
         sigma_dBt = sde.sigma(t, x, dBt)
-        jprint("t_shape: {t}, x_shape: {x}", t=t.shape, x=x.shape)
-        jprint("t:{t}, x_norm_em: {x}", x=jnp.linalg.norm(x), t=t)
+        # jprint("t_shape: {t}, x_shape: {x}", t=t.shape, x=x.shape)
+        # jprint("t:{t}, x_norm_em: {x}", x=jnp.linalg.norm(x), t=t)
         # jprint("t: {t}, x: {x}, drift_eval: {drift_eval}, dBt: {dBt}, sigma_dBt: {sigma_dBt}", t=t, x=jnp.any(jnp.isnan(x)), drift_eval=jnp.any(jnp.isnan(drift_eval)), dBt=jnp.any(jnp.isnan(dBt)), sigma_dBt=jnp.any(jnp.isnan(sigma_dBt)))
         x = x + dt * drift_eval + dt**0.5 * sigma_dBt
         # jprint("t: {t}, x after: {x}", x=jnp.any(jnp.isnan(x)), t=t)
