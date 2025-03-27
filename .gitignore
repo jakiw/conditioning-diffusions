@@ -5,6 +5,7 @@ __pycache__/
 *$py.class
 
 flow_matching_jax/
+workdir
 
 wandb/
 # C extensions

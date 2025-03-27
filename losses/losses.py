@@ -41,13 +41,14 @@ def get_loss(rng, sde, nn_model, nn_params, ts, initial_samples, _y_obs):
     return jnp.mean(errors)
 
 
-def get_loss_nik_single_path(rng, sde, nn_model, nn_params, ts, initial_sample, **kwargs):
+def get_loss_nik_single_path(rng, sde, nn_model, nn_params, ts, initial_sample, get_y_obs, **kwargs):
     rng, srng = random.split(rng)
     sample_path, _drift_evals, dBts = run_sde(srng, sde, ts, initial_sample, noise_last_step=True)
 
     rng, srng = random.split(rng)
     doobs = solve_J_equation_2(srng, sde, ts, sample_path, dBts, **kwargs)
-    y = sample_path[-1, :]
+    # y = sample_path[-1, :]
+    y = get_y_obs(sample_path[-1, :])
     predictions = vmap(nn_model.apply, in_axes=(None, 0, 0, None))(nn_params, ts[:-1], sample_path[:-1], y)
 
     a_times_doobs = vmap(sde.covariance, in_axes=(0, 0, 0))(ts[:-1], sample_path[:-1], doobs)
@@ -60,10 +61,10 @@ def get_loss_nik_single_path(rng, sde, nn_model, nn_params, ts, initial_sample, 
     return error
 
 
-def get_loss_nik(rng, sde, nn_model, nn_params, ts, initial_samples, _y_obs, **kwargs):
+def get_loss_nik(rng, sde, nn_model, nn_params, ts, initial_samples, _y_obs, get_y_obs, **kwargs):
     rngs = random.split(rng, initial_samples.shape[0])
     f = lambda rng_, initial_sample_: get_loss_nik_single_path(
-        rng_, sde, nn_model, nn_params, ts, initial_sample_, **kwargs
+        rng_, sde, nn_model, nn_params, ts, initial_sample_, get_y_obs, **kwargs
     )
     errors = vmap(f, in_axes=(0, 0), out_axes=(0))(rngs, initial_samples)
     # breakpoint_on_nan(errors)

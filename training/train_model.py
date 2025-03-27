@@ -7,7 +7,7 @@ from tqdm import tqdm
 
 import tensorflow as tf
 from tensorboard.plugins.hparams import api as hp
-
+import wandb
 
 from losses.update_step import update_step
 from metrics.metrics import (
@@ -29,7 +29,7 @@ def train_model(
     y_init_eval,
     sde,
     loss_function,
-    tf_writer,
+    get_obs,
     N_batches=1_001,
     N_batch_size=512,
     N_log=100,
@@ -98,7 +98,7 @@ def train_model(
         # x0s = initial_sampler(srng, N_batch_size)
         rng, srng = random.split(rng)
         val, nn_params, opt_state, grad_norm = update_step(
-            srng, loss_function, sde, nn_model, nn_params, ts, x0s, opt_state, optimizer, y_obs, grad_clip=1
+            srng, loss_function, sde, nn_model, nn_params, ts, x0s, opt_state, optimizer, y_obs, get_obs, grad_clip=1
         )
         losses.append(val)
         grad_norms.append(grad_norm)
@@ -126,13 +126,16 @@ def train_model(
             # if true drift is known
             # m2 = kl_metrics(eval_rng, sde, ts, nn_model, nn_params, initial_samples_eval, true_control, y_obs_arr, "generated")
 
-            metrics_log = {"grad_variance": grad_var}
-            tf.summary.scalar("grad_variance", grad_var, step=i+1)
+            metrics_log = {"grad_variance": grad_var, "loss": loss_avg, "step": i+1}
+            wandb.log(metrics_log, step=i+1)
+            
+            # tf.summary.scalar("grad_variance", grad_var, step=i+1)
             for metric_name, metric in metrics.items():
                 #should y_init eval have a batch dimension or not? i changed this 
-                metric_value = metric(rng, nn_model, nn_params, y_init_eval, y_obs)
-                metrics_log[metric_name] = metric_value
-                tf.summary.scalar(metric_name, metric_value, step=i+1)
+                metric_value = metric(rng, nn_model, nn_params, y_init_eval, y_obs, i+1)
+                if metric_value is not None:
+                    metrics_log[metric_name] = metric_value
+                # tf.summary.scalar(metric_name, metric_value, step=i+1)
 
             # kl_m = kl_metrics(eval_rng, sde, ts, nn_model, nn_params, initial_samples_eval, true_control, y_obs, "true")
             # kl_m_gen = kl_metrics(eval_rng, sde, ts, nn_model, nn_params, initial_samples_eval, true_control, y_obs, "generated")
