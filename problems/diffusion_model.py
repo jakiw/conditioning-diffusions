@@ -28,12 +28,12 @@ def restore_checkpoint_from_config_directory(config, workdir):
     return config, state
 
 
-def log_image_grid(images, step, label="image_grid"):
+def log_image_grid(images, step, label="image_grid", cmap=None):
     N, W, H, C = images.shape
     n = int(jnp.sqrt(N))
     assert n * n == N, "N must be a perfect square"
 
-    fig, axs = plt.subplots(n, n, figsize=(n, n))
+    fig, axs = plt.subplots(n, n, figsize=(10, 10))
     axs = axs.reshape(-1)  # flatten in case axs is 2D
 
     #set figure title
@@ -42,7 +42,7 @@ def log_image_grid(images, step, label="image_grid"):
     fig.tight_layout()
 
     for i in range(N):
-        axs[i].imshow(images[i])
+        axs[i].imshow(images[i], cmap=cmap)
         axs[i].axis('off')
 
     for ax in axs[N:]:
@@ -60,9 +60,13 @@ def get_problem(config, workdir, ts, get_obs = None, N_samples_eval=16):
         def get_obs(x):
             return x
     _, state = restore_checkpoint_from_config_directory(config, workdir)
+    h = 1/45
     def my_sigma(t):
-        return 0.5
+        return jnp.sqrt(2 * (1 - t + h) / (t + h))
+        # return 0.5
     
+    # sigmas.append(lambda t: )
+
     sde_fm = get_sde_fm(state, my_sigma, True)
 
     def unbatched_drift(t, x):
@@ -105,11 +109,11 @@ def get_problem(config, workdir, ts, get_obs = None, N_samples_eval=16):
         samples = paths[:, -1, :]
         samples = samples.at[0, :].set(X)
         name = f"samples"
-        log_image_grid(samples, step, label=name)
+        log_image_grid(samples, step, label=name, cmap="Greys")
 
         observations = vmap(get_obs)(samples)
         name = f"observations"
-        log_image_grid(observations, step, label=name)
+        log_image_grid(observations, step, label=name, cmap="Greys")
 
         return 0
 
