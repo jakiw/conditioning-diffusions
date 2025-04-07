@@ -141,21 +141,21 @@ def train_model(
             # kl_m_gen = kl_metrics(eval_rng, sde, ts, nn_model, nn_params, initial_samples_eval, true_control, y_obs, "generated")
             # mv_m = mv_metric(eval_rng, sde, ts, nn_model, nn_params, initial_samples_eval, true_control, y_obs)
             # all_metrics.append({"kl_true": kl_m, "mean_var": mv_m, "kl_gen": kl_m_gen, "grad_variance": grad_var})
-            all_metrics.append(metrics_log)
+            # all_metrics.append(metrics_log)
 
             # if metrics_log[main_metric] < min_metric:
             #     best_params = nn_params.copy()
             #     min_metric = metrics_log[main_metric]
             #     best_epoch = i + 1
 
-    all_metrics = {key: [d[key] for d in all_metrics] for key in all_metrics[0]}
-    last_metrics = {}
-    for metric_name, metric in metrics.items():
-        # best = onp.min(all_metrics[metric_name])
-        last_metrics[metric_name] = all_metrics[metric_name][-1]
+    # all_metrics = {key: [d[key] for d in all_metrics] for key in all_metrics[0]}
+    # last_metrics = {}
+    # for metric_name, metric in metrics.items():
+    #     # best = onp.min(all_metrics[metric_name])
+    #     last_metrics[metric_name] = all_metrics[metric_name][-1]
 
-    average_grad_var = onp.mean(all_metrics["grad_variance"][1:])
-    last_metrics["avg_grad_var"] = average_grad_var
+    # average_grad_var = onp.mean(all_metrics["grad_variance"][1:])
+    # last_metrics["avg_grad_var"] = average_grad_var
     # best_metrics["best_epoch"] = best_epoch
     # all_metrics["best_epoch"] = best_epoch
 
@@ -163,4 +163,4 @@ def train_model(
 
     # BEST METRICS ARE ACTUALLY JUST LAST METRICS NOW
 
-    return nn_params, all_metrics, last_metrics
+    return nn_params#, all_metrics, last_metrics

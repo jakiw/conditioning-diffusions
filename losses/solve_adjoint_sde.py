@@ -2,6 +2,7 @@ import jax.numpy as jnp
 from jax import grad, jacfwd, jacobian, jacrev, jit, random, value_and_grad, vmap
 from jax.lax import scan
 from jax.debug import print as jprint
+from functools import partial
 
 
 def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
@@ -62,6 +63,22 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
         mat_flat = mat.reshape(D, D)
         result_flat = vec_flat.T.dot(mat_flat)
         return result_flat.reshape(orig_shape)        
+    
+    def drift_v_product(t, x, v):
+
+        @grad
+        def df_v(z):
+            return jnp.sum(v * sde.drift(t, z))
+        
+        return df_v(x)
+    
+    def sigma_v_product(t, x, dBt, v):
+        @grad
+        def df_v(z):
+            return jnp.sum(v * sde.sigma(t, z, dBt))
+        
+        return df_v(x)
+
 
     def step(carry, params):
         t, dt, x, dBt, is_first, alpha_factor = params
@@ -70,13 +87,6 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
         rng, srng = random.split(rng)
         # SHOULD THERE BE NO DT IN FRONT OF SIGMA? -> Don't think so, it is multiplied by dBt
 
-        # doob_jac = doob.T.dot(drift_jac(t, x))
-        doob_jac = generalized_matvec(drift_jac(t, x), doob)
-
-        # doob_sig = doob.T.dot(sigma_jac(t, x, dBt))
-        doob_sig = generalized_matvec(sigma_jac(t, x, dBt), doob)
-
-        propagated_doob = doob + dt * doob_jac + doob_sig
 
 
         # Basically two different ways to discretize \int J_{s | 0} sigma^{-T} (dBs)
@@ -84,35 +94,66 @@ def solve_J_equation_2(rng, sde, ts, sample_path, sample_dBts, **kwargs):
         sigma_dBt = sde.sigma_transp_inv(t, x, dBt)
 
 
-        # sigma_dBt_jac = sigma_dBt.T.dot(drift_jac(t, x))
-        sigma_dBt_jac = generalized_matvec(drift_jac(t, x), sigma_dBt)
-
-        # sigma_dBt_jac = sigma_dBt.T.dot(sigma_jac(t, x, dBt))
-        sigma_dBt_jac = generalized_matvec(sigma_jac(t, x, dBt), sigma_dBt)
-
-        sigma_dBt_J_delta_t = sigma_dBt + dt * sigma_dBt_jac + sigma_dBt_jac
 
         # Basically the flow SDE just differentiates each part of the SDE with respect to x
         # Therefore we basically go back by d/dx (dt * drift) + d/dx (sigma * dBt)
         # Since doob is something that is applied to the derivative (not a x-value, but a direction)
         # it goes from the other side via the transpose
-        if mode == "last":
-            # dBt *= is_first
-            # doob = dBt + J_increment.T.dot(doob)
-            doob = (
-                sigma_dBt * is_first + propagated_doob
-            )  # dt * doob.T.dot(drift_jac(t, x)) + doob.T.dot(sigma_jac(t, x, dBt))
-            # doob += sigma_dBt * is_first + dt * doob.T.dot(drift_jac(t, x)) + doob.T.dot(sigma_jac(t, x, dBt))
-        elif mode == "average":
-            doob = sigma_dBt + propagated_doob
-            # doob += dBt + dt * doob.T.dot(drift_jac(t, x)) + dt * dBt.T.dot(drift_jac(t, x))
+        if mode in ["last", "optimal", "average"]:
+            # doob_jac = doob.T.dot(drift_jac(t, x))
+            # doob_jac = generalized_matvec(drift_jac(t, x), doob)
+            # print("SHAPESKI")
+            # print(doob_jac.shape)
+            doob_db = drift_v_product(t, x, doob)
+            # print(doob_jac.shape)
+
+            # doob_sig = doob.T.dot(sigma_jac(t, x, dBt))
+            # doob_sig = generalized_matvec(sigma_jac(t, x, dBt), doob)
+            doob_dsig = sigma_v_product(t, x, dBt, doob)
+            propagated_doob = doob + dt * doob_db + doob_dsig
+            if mode == "last":
+                print("last compiled (IT SHOULD NOT BE)")
+                # dBt *= is_first
+                # doob = dBt + J_increment.T.dot(doob)
+                doob = (
+                    sigma_dBt * is_first + propagated_doob
+                )  # dt * doob.T.dot(drift_jac(t, x)) + doob.T.dot(sigma_jac(t, x, dBt))
+                # doob += sigma_dBt * is_first + dt * doob.T.dot(drift_jac(t, x)) + doob.T.dot(sigma_jac(t, x, dBt))
+            elif mode == "average":
+                doob = sigma_dBt + propagated_doob
+                # doob += dBt + dt * doob.T.dot(drift_jac(t, x)) + dt * dBt.T.dot(drift_jac(t, x))
+            elif mode == "optimal":
+                doob = sigma_dBt + propagated_doob * alpha_factor
         elif mode == "first":
-            # doob = dBt
-            doob = sigma_dBt_J_delta_t
-        elif mode == "optimal":
-            doob = sigma_dBt + propagated_doob * alpha_factor
+            # sigma_dBt_jac = sigma_dBt.T.dot(drift_jac(t, x))
+            # sigma_dBt_db = generalized_matvec(drift_jac(t, x), sigma_dBt)
+            sigma_dBt_db = drift_v_product(t, x, sigma_dBt)
+
+            # sigma_dBt_jac = sigma_dBt.T.dot(sigma_jac(t, x, dBt))
+            # sigma_dBt_dsigma = generalized_matvec(sigma_jac(t, x, dBt), sigma_dBt)
+            sigma_dBt_dsigma = sigma_v_product(t, x, dBt, sigma_dBt)
+
+            doob = sigma_dBt + dt * sigma_dBt_db + sigma_dBt_dsigma
         else:
             raise Exception(f"Mode '{mode}' not supported")
+
+
+
+        # if mode == "last":
+        #     # dBt *= is_first
+        #     # doob = dBt + J_increment.T.dot(doob)
+        #     doob = (
+        #         sigma_dBt * is_first + propagated_doob
+        #     )  # dt * doob.T.dot(drift_jac(t, x)) + doob.T.dot(sigma_jac(t, x, dBt))
+        #     # doob += sigma_dBt * is_first + dt * doob.T.dot(drift_jac(t, x)) + doob.T.dot(sigma_jac(t, x, dBt))
+        # elif mode == "average":
+        #     doob = sigma_dBt + propagated_doob
+        #     # doob += dBt + dt * doob.T.dot(drift_jac(t, x)) + dt * dBt.T.dot(drift_jac(t, x))
+        # elif mode == "first":
+        #     # doob = dBt
+        #     doob = sigma_dBt_J_delta_t
+        # elif mode == "optimal":
+        #     doob = sigma_dBt + propagated_doob * alpha_factor
         # elif mode == "soc":
         # THIS sets x_{N-1} to the bridge value instead of x_N !
         #     initial = (-1 - x) * is_first / dt
